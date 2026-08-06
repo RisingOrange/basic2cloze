@@ -23,14 +23,12 @@ except:
 
 CLOZE_RE = r"\{\{c\d+::[\s\S]*?\}\}"
 
-
 def contains_cloze(note: Note):
     for fld in note.fields:
         m = re.search(CLOZE_RE, fld)
         if m:
             return True
     return False
-
 
 def main():
     def convert_basic_to_cloze(problem, note: Note):
@@ -178,3 +176,29 @@ def main():
                 _oldReSearch = None
 
         Editor._onCloze = wrap(Editor._onCloze, _onClozeNew, "around")
+
+    # Bypass JS UI disabling the cloze button when on a Basic note (introduced in Anki commit efaaae8)
+    try:
+        from anki.models import ModelManager
+
+        if hasattr(ModelManager, "cloze_fields") and getattr(ModelManager.cloze_fields, "__name__", "") != "_cloze_fields_new":
+            original_cloze_fields = ModelManager.cloze_fields
+
+            def _cloze_fields_new(self, mid):
+                try:
+                    basicNoteTypes = get_basic_note_type_ids()
+                except Exception:
+                    basicNoteTypes = []
+
+                if mid in basicNoteTypes:
+                    m = self.get(mid)
+                    if m and "flds" in m:
+                        # Return all fields as 'cloze fields' to enable buttons/shortcuts in JS
+                        return list(range(len(m["flds"])))
+                    return []
+
+                return original_cloze_fields(self, mid)
+
+            ModelManager.cloze_fields = _cloze_fields_new
+    except Exception:
+        pass
