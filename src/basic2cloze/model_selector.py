@@ -4,6 +4,9 @@ from aqt import mw
 
 from .model_finder import get_basic_note_type_ids, get_cloze_note_type
 
+# Matched exactly, so the case matters: this is `model_name` in the Cloze (Hide
+# All) add-on, trgkanki/cloze_hide_all src/model/consts.py. Its README spells it
+# "Hide All" in prose, but the note type it registers is "Hide all".
 CLOZE_HIDE_ALL_NAME = "Cloze (Hide all)"
 
 # named for the opening delimiter, not a whole cloze: basic2cloze.CLOZE_RE is a
@@ -25,11 +28,11 @@ def target_model(note):
         hide_all_id = mw.col.models.id_for_name(CLOZE_HIDE_ALL_NAME)
         if hide_all_id:
             return mw.col.models.get(hide_all_id)
-        # Fall through to the plain Cloze type rather than refuse the add. That
-        # note type belongs to the cloze-hide-all add-on, which now calls it
-        # legacy and applies hide-all to regular Cloze notes instead -- so its
-        # absence often means the plain type is the correct target. Don't strip
-        # the "!" either: it is only a marker to that add-on, and is ordinary
-        # answer text in clozes like {{c1::!=}}.
+        # Fall through to the plain Cloze type rather than refuse the add. The
+        # hide-all behaviour is lost -- that add-on now applies it via a marker
+        # on the note, which a note we just converted will not carry -- so the
+        # "!" ends up as literal answer text. Still better than blocking the
+        # add, and it must not be stripped: "!" is ordinary cloze content in
+        # answers like {{c1::!=}}, with no way to tell marker from text.
 
     return get_cloze_note_type()
