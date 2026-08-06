@@ -1,0 +1,36 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+  # The contract tests exist to notice Anki breaking us, which happens on
+  # Anki's release schedule rather than on ours -- so run them without a push.
+  schedule:
+    - cron: "0 6 * * 1"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install the newest Anki
+        # aqt is only ever read as source text, never imported, so skip its
+        # PyQt6 dependency
+        run: |
+          uv venv
+          uv pip install pytest anki
+          uv pip install --no-deps aqt
+
+      - name: Show which Anki version we are testing against
+        run: uv run --no-project python -c "import anki.buildinfo; print(anki.buildinfo.version)"
+
+      # --no-project because pyproject.toml carries pytest config only; this
+      # repo is an Anki add-on, not an installable package
+      - run: uv run --no-project pytest -v
