@@ -1,12 +1,13 @@
 name: tests
 
+# Deliberately no `schedule:` trigger. The contract tests would ideally run on
+# Anki's release schedule rather than ours, but GitHub disables cron in public
+# repositories after 60 days without activity, so it would go quiet during
+# exactly the dormant stretches it was meant to cover. Run the tests by hand
+# when checking a new Anki release: uv run --no-project pytest
 on:
   push:
   pull_request:
-  # The contract tests exist to notice Anki breaking us, which happens on
-  # Anki's release schedule rather than on ours -- so run them without a push.
-  schedule:
-    - cron: "0 6 * * 1"
 
 jobs:
   test:
