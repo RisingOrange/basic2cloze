@@ -75,12 +75,12 @@ def main():
         ):
             return problem
 
-        if not target_model(note):
+        new_model = target_model(note)
+        if not new_model:
             tooltip("[Automatic Basic to Cloze] Cannot find 'Cloze' note type")
             return problem
 
         old_model = mw.col.models.get(note.mid)
-        new_model = target_model(note)
 
         field_values = [
             note[old_model["flds"][i]["name"]]
