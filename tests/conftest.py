@@ -46,7 +46,7 @@ def load_addon(monkeypatch):
     registers the hooks.
     """
 
-    def load(*, cloze_fields_exists: bool):
+    def load(*, cloze_fields_exists: bool, hook_exists: bool = True):
         profile_hooks = []
 
         anki = types.ModuleType("anki")
@@ -82,9 +82,10 @@ def load_addon(monkeypatch):
             add_cards_will_add_note=FilterHook(),
             add_cards_did_init=FilterHook(),
             editor_did_load_note=FilterHook(),
-            editor_will_load_note=FilterHook(),
             profile_did_open=FilterHook(),
         )
+        if hook_exists:
+            gui_hooks.editor_will_load_note = FilterHook()
 
         aqt = types.ModuleType("aqt")
         aqt.gui_hooks = gui_hooks

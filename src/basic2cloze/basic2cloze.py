@@ -1,5 +1,6 @@
 import json
 import re
+import traceback
 
 from anki.hooks import wrap
 from anki.models import ModelManager
@@ -121,15 +122,24 @@ def main():
                 return js
 
             all_fields_are_cloze = json.dumps([True] * len(note_type["flds"]))
-            # triggerChanges is what makes the editor pick the flags up; Anki
-            # calls it at the end of its own batch, so call it again after ours.
-            return f"{js} setClozeFields({all_fields_are_cloze}); triggerChanges();"
-        except Exception as e:
+            # guarded so that losing the global degrades to Anki's own flags,
+            # rather than rejecting the promise this JS runs in and costing us
+            # editor_did_load_note and the duplicate display update with it
+            return (
+                f"{js} if (typeof setClozeFields === 'function')"
+                f" {{ setClozeFields({all_fields_are_cloze}); }}"
+            )
+        except Exception:
             # this hook drops a callback permanently if it raises
-            print(e)
+            traceback.print_exc()
             return js
 
-    if hasattr(ModelManager, "cloze_fields"):
+    # cloze_fields arrived with the per-field gating, so it stands in for it.
+    # The hook itself long predates that, but check rather than risk an
+    # AttributeError taking the whole add-on down at import.
+    if hasattr(ModelManager, "cloze_fields") and hasattr(
+        gui_hooks, "editor_will_load_note"
+    ):
         gui_hooks.editor_will_load_note.append(enable_cloze_in_all_fields_for_basic)
 
     # hide cloze warnings

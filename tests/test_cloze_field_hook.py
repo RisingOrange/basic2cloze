@@ -17,7 +17,10 @@ def widen_cloze_fields(load_addon):
 def test_basic_note_gets_every_field_flagged(widen_cloze_fields):
     js = widen_cloze_fields("setFields(x);", FakeNote(BASIC_ID, 2), None)
 
-    assert js == "setFields(x); setClozeFields([true, true]); triggerChanges();"
+    assert js == (
+        "setFields(x); if (typeof setClozeFields === 'function')"
+        " { setClozeFields([true, true]); }"
+    )
 
 
 def test_flag_count_follows_the_field_count(widen_cloze_fields):
@@ -46,8 +49,24 @@ def test_a_raising_note_does_not_take_the_hook_down_with_it(widen_cloze_fields):
     assert widen_cloze_fields("js;", ExplodingNote(), None) == "js;"
 
 
+def test_the_appended_js_degrades_if_the_global_disappears(widen_cloze_fields):
+    """A bare call would reject the promise Anki runs this JS in."""
+    js = widen_cloze_fields("js;", FakeNote(BASIC_ID, 1), None)
+
+    assert "typeof setClozeFields === 'function'" in js
+
+
 def test_hook_is_not_registered_on_anki_without_cloze_fields(load_addon):
     """Before Anki 25.9 there were no per-field cloze flags to widen."""
     gui_hooks = load_addon(cloze_fields_exists=False)
 
     assert gui_hooks.editor_will_load_note.callbacks == []
+
+
+def test_addon_still_loads_if_anki_drops_the_hook(load_addon):
+    """Registering blind would AttributeError and take the add-on with it."""
+    gui_hooks = load_addon(cloze_fields_exists=True, hook_exists=False)
+
+    assert not hasattr(gui_hooks, "editor_will_load_note")
+    # the rest of the add-on still came up
+    assert gui_hooks.add_cards_will_add_note.callbacks
