@@ -134,6 +134,13 @@ def load_addon(monkeypatch):
 
         import basic2cloze  # noqa: F401  -- importing registers the hooks
 
+        # Plain del, not monkeypatch: this import has to be forgotten for good,
+        # or a later test gets a basic2cloze still bound to these stubs. The
+        # hooks registered above keep working, they hold the functions directly.
+        for name in list(sys.modules):
+            if name.split(".")[0] == "basic2cloze":
+                del sys.modules[name]
+
         for name, callback in profile_hooks:
             if name == "profileLoaded":
                 callback()  # populates model_finder's cached notetype ids

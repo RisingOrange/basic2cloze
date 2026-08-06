@@ -91,14 +91,36 @@ def test_cloze_fields_are_set_in_the_js_batch_we_filter():
     )
 
 
-@pytest.mark.parametrize("global_name", ["setClozeFields", "triggerChanges"])
-def test_editor_frontend_exposes_the_globals_we_call(global_name):
-    """Our JS calls these two by name in the editor webview."""
+def editor_bundle() -> str:
     bundle = package_dir("_aqt") / "data" / "web" / "js" / "editor.js"
     if not bundle.exists():
         pytest.skip("editor.js bundle not present in this build")
+    return bundle.read_text(encoding="utf8", errors="replace")
 
-    assert global_name in bundle.read_text(encoding="utf8", errors="replace")
+
+def test_editor_frontend_exposes_set_cloze_fields():
+    """enable_cloze_in_all_fields_for_basic calls this global by name."""
+    assert "setClozeFields" in editor_bundle()
+
+
+def test_editor_frontend_exposes_the_notetype_toolbar():
+    """maybe_show_cloze_button reaches the cloze button through this module.
+
+    Widening the cloze fields only enables the button; this is what makes it
+    visible in the first place, so both halves need the frontend to hold still.
+    """
+    bundle = editor_bundle()
+
+    assert '"anki/NoteEditor"' in bundle, (
+        "the editor no longer registers anki/NoteEditor -- the require() in "
+        "maybe_show_cloze_button will stop finding it"
+    )
+    # matched loosely: everything else in that registration is a minified name
+    registration = bundle.split('"anki/NoteEditor"', 1)[1][:200]
+    assert "instances" in registration, (
+        "anki/NoteEditor no longer exposes instances, which "
+        "maybe_show_cloze_button indexes to reach the toolbar"
+    )
 
 
 def test_add_note_problem_is_filtered_through_addons():

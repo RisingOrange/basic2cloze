@@ -10,6 +10,13 @@ Automatically convert cloze-y things to cloze type.
 
 ![Example image](screenshots/basic2cloze.gif)
 
+## Compatibility
+
+This add-on works with Anki's classic editor. It does nothing in the newer
+Svelte editor, which is currently behind the `SVELTE_EDITOR` experimental
+feature flag and off by default: that editor gets its note data straight from
+the backend and does not run the hooks this add-on relies on.
+
 ## Tests
 
 This add-on breaks when Anki changes, so most of the tests check that the Anki
