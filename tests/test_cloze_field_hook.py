@@ -4,7 +4,7 @@ import pytest
 
 from conftest import BASIC, BASIC_ID, CLOZE_ID, FakeNote
 
-UNRELATED_ID = 3333
+UNRELATED_ID = 9999  # distinct from every id conftest hands out
 
 
 @pytest.fixture

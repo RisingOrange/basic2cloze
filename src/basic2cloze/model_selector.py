@@ -6,8 +6,11 @@ from .model_finder import get_basic_note_type_ids, get_cloze_note_type
 
 CLOZE_HIDE_ALL_NAME = "Cloze (Hide all)"
 
-CLOZE_RE = r"\{\{c\d+::"
-HIDE_ALL_CLOZE_RE = r"\{\{c\d+::!"
+# named for the opening delimiter, not a whole cloze: basic2cloze.CLOZE_RE is a
+# different pattern that also requires the closing braces
+CLOZE_START_RE = r"\{\{c\d+::"
+# in the cloze-hide-all add-on a leading "!" marks a cloze that stays exposed
+EXPOSED_CLOZE_START_RE = CLOZE_START_RE + "!"
 
 
 def target_model(note):
@@ -15,14 +18,18 @@ def target_model(note):
     if note.note_type()["id"] not in get_basic_note_type_ids():
         return None
 
-    if not any(re.search(CLOZE_RE, value) for _, value in note.items()):
+    if not any(re.search(CLOZE_START_RE, value) for _, value in note.items()):
         return None
 
-    if any(re.search(HIDE_ALL_CLOZE_RE, value) for _, value in note.items()):
+    if any(re.search(EXPOSED_CLOZE_START_RE, value) for _, value in note.items()):
         hide_all_id = mw.col.models.id_for_name(CLOZE_HIDE_ALL_NAME)
         if hide_all_id:
             return mw.col.models.get(hide_all_id)
-        # that note type comes from another add-on and is usually absent, so
-        # fall through to the plain Cloze type rather than refusing the add
+        # Fall through to the plain Cloze type rather than refuse the add. That
+        # note type belongs to the cloze-hide-all add-on, which now calls it
+        # legacy and applies hide-all to regular Cloze notes instead -- so its
+        # absence often means the plain type is the correct target. Don't strip
+        # the "!" either: it is only a marker to that add-on, and is ordinary
+        # answer text in clozes like {{c1::!=}}.
 
     return get_cloze_note_type()

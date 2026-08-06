@@ -44,6 +44,7 @@ def test_tags_survive_the_conversion(convert):
 
     convert_basic_to_cloze(None, note)
 
+    assert note.note_type()["id"] == CLOZE_ID, "otherwise nothing was converted"
     assert note.tags == ["geography", "marked"]
 
 
@@ -90,6 +91,9 @@ def test_hide_all_syntax_falls_back_when_that_note_type_is_missing(convert):
 def test_no_cloze_note_type_at_all_blocks_the_add_with_a_tooltip(convert):
     convert_basic_to_cloze, addon = convert(notetypes=(BASIC,))
     note = basic_note("{{c1::orphaned}}")
+    # model_finder warns about the missing note type at profile load too, so
+    # only tooltips from the conversion itself should count here
+    addon.tooltips.clear()
 
     problem = convert_basic_to_cloze(NOT_CLOZE_PROBLEM, note)
 
@@ -98,8 +102,39 @@ def test_no_cloze_note_type_at_all_blocks_the_add_with_a_tooltip(convert):
     assert any("Cloze" in text for text in addon.tooltips)
 
 
-def test_field_values_are_not_lost_when_the_target_has_fewer_fields(convert):
-    """Basic and Cloze both have two fields today; don't rely on that."""
+def test_hide_all_is_reachable_without_a_plain_cloze_note_type(convert):
+    """The hide-all branch returns before the plain Cloze lookup, so a
+    collection with only that note type still converts."""
+    convert_basic_to_cloze, _ = convert(notetypes=(BASIC, CLOZE_HIDE_ALL))
+    note = basic_note("{{c1::!hidden}}")
+
+    problem = convert_basic_to_cloze(NOT_CLOZE_PROBLEM, note)
+
+    assert problem is None
+    assert note.note_type()["id"] == HIDE_ALL_ID
+
+
+def test_surplus_target_fields_are_left_blank(convert):
+    three_field_cloze = {
+        "id": CLOZE_ID,
+        "name": "Cloze",
+        "flds": [{"name": "Text"}, {"name": "Back Extra"}, {"name": "Notes"}],
+    }
+    convert_basic_to_cloze, _ = convert(notetypes=(BASIC, three_field_cloze))
+    note = basic_note("{{c1::kept}}", "extra")
+
+    problem = convert_basic_to_cloze(NOT_CLOZE_PROBLEM, note)
+
+    assert problem is None
+    assert note.fields == ["{{c1::kept}}", "extra", ""]
+
+
+def test_overlapping_fields_are_kept_when_the_target_has_fewer_fields(convert):
+    """The surplus field is silently dropped -- pre-existing, documented here.
+
+    Basic and Cloze both have two fields today, so nothing hits this in a
+    stock collection, but neither note type is guaranteed to stay that way.
+    """
     one_field_cloze = {"id": CLOZE_ID, "name": "Cloze", "flds": [{"name": "Text"}]}
     convert_basic_to_cloze, _ = convert(notetypes=(BASIC, one_field_cloze))
     note = basic_note("{{c1::kept}}", "dropped")
@@ -107,4 +142,4 @@ def test_field_values_are_not_lost_when_the_target_has_fewer_fields(convert):
     problem = convert_basic_to_cloze(NOT_CLOZE_PROBLEM, note)
 
     assert problem is None
-    assert note["Text"] == "{{c1::kept}}"
+    assert note.fields == ["{{c1::kept}}"], "'dropped' has nowhere to go"
