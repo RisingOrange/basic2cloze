@@ -1,6 +1,8 @@
+import json
 import re
 
 from anki.hooks import wrap
+from anki.models import ModelManager
 from anki.notes import Note
 from aqt import gui_hooks, mw
 from aqt.addcards import AddCards
@@ -107,6 +109,28 @@ def main():
             )
 
     gui_hooks.editor_did_load_note.append(maybe_show_cloze_button)
+
+    # Anki >= 25.9 additionally greys the cloze button out unless the focused
+    # field is one of the note type's cloze fields. Basic has none, so the
+    # button shown above would never become usable. Anki sets the per-field
+    # flags from the JS that loadNote runs, so widen them there.
+    def enable_cloze_in_all_fields_for_basic(js: str, note: Note, editor) -> str:
+        try:
+            note_type = note.note_type()
+            if note_type["id"] not in get_basic_note_type_ids():
+                return js
+
+            all_fields_are_cloze = json.dumps([True] * len(note_type["flds"]))
+            # triggerChanges is what makes the editor pick the flags up; Anki
+            # calls it at the end of its own batch, so call it again after ours.
+            return f"{js} setClozeFields({all_fields_are_cloze}); triggerChanges();"
+        except Exception as e:
+            # this hook drops a callback permanently if it raises
+            print(e)
+            return js
+
+    if hasattr(ModelManager, "cloze_fields"):
+        gui_hooks.editor_will_load_note.append(enable_cloze_in_all_fields_for_basic)
 
     # hide cloze warnings
     if ANKI_VERSION_TUPLE >= (2, 1, 45):
