@@ -1,4 +1,4 @@
-"""Covers the JS that enable_cloze_in_all_fields_for_basic appends."""
+"""Covers the JS that flag_cloze_fields_for_basic appends."""
 
 import pytest
 
@@ -8,25 +8,54 @@ UNRELATED_ID = 3333
 
 
 @pytest.fixture
-def widen_cloze_fields(load_addon):
-    hook = load_addon(cloze_fields_exists=True).editor_will_load_note
-    assert len(hook.callbacks) == 1
-    return hook.callbacks[0]
+def flag_cloze_fields(load_addon):
+    def make(**kwargs):
+        hook = load_addon(cloze_fields_exists=True, **kwargs).editor_will_load_note
+        assert len(hook.callbacks) == 1
+        return hook.callbacks[0]
+
+    return make
 
 
-def test_basic_note_gets_every_field_flagged(widen_cloze_fields):
+@pytest.fixture
+def widen_cloze_fields(flag_cloze_fields):
+    return flag_cloze_fields()
+
+
+def test_only_fields_that_survive_conversion_are_flagged(widen_cloze_fields):
+    """Basic's Back maps onto Cloze's Back Extra, which is not a cloze field,
+    so offering the button there would invite a cloze that deletes nothing."""
     js = widen_cloze_fields("setFields(x);", FakeNote(BASIC_ID, 2), None)
 
     assert js == (
         "setFields(x); if (typeof setClozeFields === 'function')"
-        " { setClozeFields([true, true]); }"
+        " { setClozeFields([true, false]); }"
     )
 
 
+def test_flags_follow_a_customised_cloze_note_type(flag_cloze_fields):
+    """If the user made Back Extra a cloze field too, Back should follow."""
+    hook = flag_cloze_fields(cloze_ords=(0, 1))
+
+    js = hook("js;", FakeNote(BASIC_ID, 2), None)
+
+    assert "setClozeFields([true, true]);" in js
+
+
+def test_every_field_is_flagged_without_a_cloze_note_type(flag_cloze_fields):
+    """Nothing to convert into, so don't disable what the add-on just enabled."""
+    hook = flag_cloze_fields(has_cloze_note_type=False)
+
+    js = hook("js;", FakeNote(BASIC_ID, 2), None)
+
+    assert "setClozeFields([true, true]);" in js
+
+
 def test_flag_count_follows_the_field_count(widen_cloze_fields):
+    """One flag per field, whatever the Basic note type has been edited into."""
     js = widen_cloze_fields("js;", FakeNote(BASIC_ID, 5), None)
 
-    assert "setClozeFields([true, true, true, true, true]);" in js
+    assert "setClozeFields([true, false, false, false, false]);" in js
 
 
 def test_cloze_note_is_left_alone(widen_cloze_fields):

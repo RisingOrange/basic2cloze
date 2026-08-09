@@ -46,7 +46,14 @@ def load_addon(monkeypatch):
     registers the hooks.
     """
 
-    def load(*, cloze_fields_exists: bool, hook_exists: bool = True):
+    def load(
+        *,
+        cloze_fields_exists: bool,
+        hook_exists: bool = True,
+        has_cloze_note_type: bool = True,
+        # stock Cloze: Text is a cloze field, Back Extra is not
+        cloze_ords: tuple = (0,),
+    ):
         profile_hooks = []
 
         anki = types.ModuleType("anki")
@@ -71,12 +78,15 @@ def load_addon(monkeypatch):
         anki_models = types.ModuleType("anki.models")
         anki_models.ModelManager = ModelManager
 
-        notetype_ids = {"Basic": BASIC_ID, "Cloze": CLOZE_ID}
-        mw = types.SimpleNamespace(
-            col=types.SimpleNamespace(
-                models=types.SimpleNamespace(id_for_name=notetype_ids.get)
-            )
+        notetype_ids = {"Basic": BASIC_ID}
+        if has_cloze_note_type:
+            notetype_ids["Cloze"] = CLOZE_ID
+
+        models = types.SimpleNamespace(
+            id_for_name=notetype_ids.get,
+            cloze_fields=lambda notetype_id: list(cloze_ords),
         )
+        mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
 
         gui_hooks = types.SimpleNamespace(
             add_cards_will_add_note=FilterHook(),

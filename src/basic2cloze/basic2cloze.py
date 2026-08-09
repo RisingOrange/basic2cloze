@@ -35,6 +35,26 @@ def contains_cloze(note: Note):
     return False
 
 
+def cloze_field_flags(note_type):
+    """Which of this note type's fields to present as cloze fields.
+
+    Conversion maps fields positionally, and only some of the Cloze note
+    type's fields are cloze fields -- Back Extra is not -- so a cloze typed
+    into Basic's Back lands somewhere it deletes nothing. Flag the ones that
+    do survive conversion, rather than all of them.
+    """
+    field_count = len(note_type["flds"])
+
+    cloze_note_type_ids = get_cloze_note_type_ids()
+    if not cloze_note_type_ids:
+        # nothing to convert into, so leave every field as it was rather than
+        # disabling the button the rest of this add-on just went and enabled
+        return [True] * field_count
+
+    cloze_ords = set(mw.col.models.cloze_fields(cloze_note_type_ids[0]))
+    return [ord in cloze_ords for ord in range(field_count)]
+
+
 def main():
     def convert_basic_to_cloze(problem, note: Note):
         if not (
@@ -114,20 +134,20 @@ def main():
     # Anki >= 25.9 additionally greys the cloze button out unless the focused
     # field is one of the note type's cloze fields. Basic has none, so the
     # button shown above would never become usable. Anki sets the per-field
-    # flags from the JS that loadNote runs, so widen them there.
-    def enable_cloze_in_all_fields_for_basic(js: str, note: Note, editor) -> str:
+    # flags from the JS that loadNote runs, so set ours there.
+    def flag_cloze_fields_for_basic(js: str, note: Note, editor) -> str:
         try:
             note_type = note.note_type()
             if note_type["id"] not in get_basic_note_type_ids():
                 return js
 
-            all_fields_are_cloze = json.dumps([True] * len(note_type["flds"]))
+            flags = json.dumps(cloze_field_flags(note_type))
             # guarded so that losing the global degrades to Anki's own flags,
             # rather than rejecting the promise this JS runs in and costing us
             # editor_did_load_note and the duplicate display update with it
             return (
                 f"{js} if (typeof setClozeFields === 'function')"
-                f" {{ setClozeFields({all_fields_are_cloze}); }}"
+                f" {{ setClozeFields({flags}); }}"
             )
         except Exception:
             # this hook drops a callback permanently if it raises
@@ -140,7 +160,7 @@ def main():
     if hasattr(ModelManager, "cloze_fields") and hasattr(
         gui_hooks, "editor_will_load_note"
     ):
-        gui_hooks.editor_will_load_note.append(enable_cloze_in_all_fields_for_basic)
+        gui_hooks.editor_will_load_note.append(flag_cloze_fields_for_basic)
 
     # hide cloze warnings
     if ANKI_VERSION_TUPLE >= (2, 1, 45):
