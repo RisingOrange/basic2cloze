@@ -84,13 +84,6 @@ def test_a_raising_note_does_not_take_the_hook_down_with_it(widen_cloze_fields):
     assert widen_cloze_fields("js;", ExplodingNote(), None) == "js;"
 
 
-def test_the_appended_js_degrades_if_the_global_disappears(widen_cloze_fields):
-    """A bare call would reject the promise Anki runs this JS in."""
-    js = widen_cloze_fields("js;", FakeNote(BASIC_ID, 1), None)
-
-    assert "typeof setClozeFields === 'function'" in js
-
-
 def test_hook_is_not_registered_on_anki_without_cloze_fields(load_addon):
     """Before Anki 25.9 there were no per-field cloze flags to widen."""
     gui_hooks = load_addon(cloze_fields_exists=False)

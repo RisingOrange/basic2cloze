@@ -74,8 +74,8 @@ def test_load_note_filters_its_js_through_the_hook():
     name, editor = source_of("aqt", *EDITOR_MODULES)
 
     assert "gui_hooks.editor_will_load_note(" in editor, (
-        f"{name} no longer filters its load JS -- the cloze-field widening in "
-        "enable_cloze_in_all_fields_for_basic will silently stop applying"
+        f"{name} no longer filters its load JS -- the flags set by "
+        "flag_cloze_fields_for_basic will silently stop applying"
     )
 
 
@@ -93,14 +93,29 @@ def test_cloze_fields_are_set_in_the_js_batch_we_filter():
 
 def editor_bundle() -> str:
     bundle = package_dir("_aqt") / "data" / "web" / "js" / "editor.js"
-    if not bundle.exists():
-        pytest.skip("editor.js bundle not present in this build")
+    # not skipped: losing this bundle would mean the classic editor is gone,
+    # which is exactly the change worth being told about
+    assert bundle.exists(), f"{bundle.name} is no longer shipped"
     return bundle.read_text(encoding="utf8", errors="replace")
 
 
 def test_editor_frontend_exposes_set_cloze_fields():
-    """enable_cloze_in_all_fields_for_basic calls this global by name."""
-    assert "setClozeFields" in editor_bundle()
+    """flag_cloze_fields_for_basic calls this global by name."""
+    bundle = editor_bundle()
+
+    # the name alone also appears on internal references, so look for it as a
+    # key of the object the editor assigns onto globalThis -- that assignment
+    # is what makes our appended JS able to call it at all
+    # the bundle makes several such assignments, so check them all
+    assignments = bundle.split("Object.assign(globalThis,")[1:]
+    assert assignments, (
+        "the editor bundle no longer assigns anything onto globalThis; how it "
+        "exposes setClozeFields now needs re-checking"
+    )
+    assert any("setClozeFields:" in body[:3000] for body in assignments), (
+        "setClozeFields is no longer among the editor's globals, so the JS "
+        "appended by flag_cloze_fields_for_basic can no longer call it"
+    )
 
 
 def test_editor_frontend_exposes_the_notetype_toolbar():

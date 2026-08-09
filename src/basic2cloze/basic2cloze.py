@@ -113,6 +113,7 @@ def main():
 
     # adding the cloze buttons also enables the shortcut!
     # in older version the button and the shortcut exist by default
+    # from 25.9 this only makes them visible -- see the per-field flags below
     def maybe_show_cloze_button(editor: Editor):
         if editor.note.note_type()["id"] not in get_basic_note_type_ids():
             return
