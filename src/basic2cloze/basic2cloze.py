@@ -11,7 +11,11 @@ from aqt.editor import Editor
 from aqt.utils import tooltip
 
 from .consts import ANKI_VERSION_TUPLE
-from .model_finder import get_basic_note_type_ids, get_cloze_note_type_ids
+from .model_finder import (
+    get_basic_note_type_ids,
+    get_cloze_note_type,
+    get_cloze_note_type_ids,
+)
 from .model_selector import target_model
 
 try:
@@ -45,13 +49,13 @@ def cloze_field_flags(note_type):
     """
     field_count = len(note_type["flds"])
 
-    cloze_note_type_ids = get_cloze_note_type_ids()
-    if not cloze_note_type_ids:
+    cloze_note_type = get_cloze_note_type()
+    if not cloze_note_type:
         # nothing to convert into, so leave every field as it was rather than
         # disabling the button the rest of this add-on just went and enabled
         return [True] * field_count
 
-    cloze_ords = set(mw.col.models.cloze_fields(cloze_note_type_ids[0]))
+    cloze_ords = set(mw.col.models.cloze_fields(cloze_note_type["id"]))
     return [ord in cloze_ords for ord in range(field_count)]
 
 

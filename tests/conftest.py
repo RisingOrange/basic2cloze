@@ -84,6 +84,9 @@ def load_addon(monkeypatch):
 
         models = types.SimpleNamespace(
             id_for_name=notetype_ids.get,
+            get=lambda notetype_id: (
+                {"id": notetype_id} if notetype_id in notetype_ids.values() else None
+            ),
             cloze_fields=lambda notetype_id: list(cloze_ords),
         )
         mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
