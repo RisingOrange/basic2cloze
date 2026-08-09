@@ -6,7 +6,9 @@ name: tests
 # exactly the dormant stretches it was meant to cover. Run the tests by hand
 # when checking a new Anki release: uv run --no-project pytest
 on:
+  # push is limited to master so a branch with a PR open is not built twice
   push:
+    branches: [master]
   pull_request:
 
 jobs:

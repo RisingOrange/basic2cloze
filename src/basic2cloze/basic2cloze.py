@@ -60,8 +60,12 @@ def cloze_field_flags(note_type):
         # than invite a cloze that cannot be added.
         return None
 
+    # Has to stay behind that check. cloze_fields on an id the collection no
+    # longer holds panics out of the Rust backend as a BaseException, which
+    # the except around the caller cannot catch, and Anki drops a filter
+    # callback that raises -- so it would take the whole fix down with it.
     cloze_ords = set(mw.col.models.cloze_fields(cloze_note_type["id"]))
-    return [ord in cloze_ords for ord in range(len(note_type["flds"]))]
+    return [index in cloze_ords for index in range(len(note_type["flds"]))]
 
 
 def main():

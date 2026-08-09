@@ -69,22 +69,15 @@ def function_containing(source: str, needle: str) -> str:
     return ""
 
 
-def test_load_note_filters_its_js_through_the_hook():
-    """Our appended JS only runs because loadNote filters the batch first."""
-    name, editor = source_of("aqt", *EDITOR_MODULES)
-
-    assert "gui_hooks.editor_will_load_note(" in editor, (
-        f"{name} no longer filters its load JS -- the flags set by "
-        "flag_cloze_fields_for_basic will silently stop applying"
-    )
-
-
 def test_cloze_fields_are_set_in_the_js_batch_we_filter():
     """Our override has to land in the same batch, not a separate eval."""
     name, editor = source_of("aqt", *EDITOR_MODULES)
 
     load_note = function_containing(editor, "gui_hooks.editor_will_load_note(")
-    assert load_note, f"{name} no longer filters any JS through the hook"
+    assert load_note, (
+        f"{name} no longer filters its load JS through editor_will_load_note "
+        "-- the flags set by flag_cloze_fields_for_basic will stop applying"
+    )
     assert "setClozeFields(" in load_note, (
         f"setClozeFields moved out of the {name} function that filters its JS "
         "through editor_will_load_note, so appending to that JS no longer wins"

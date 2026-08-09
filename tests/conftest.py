@@ -87,16 +87,21 @@ def load_addon(monkeypatch):
 
         existing_notetypes = set(notetype_ids.values()) - set(deleted_note_type_ids)
 
+        def cloze_fields(notetype_id):
+            if notetype_id not in existing_notetypes:
+                # the real backend panics on an unknown id, and a panic is a
+                # BaseException, so the add-on's except Exception won't save it
+                raise BaseException(f"panic: no note type {notetype_id}")
+            # only the Cloze note type has cloze fields, so asking about the
+            # wrong one has to come back empty rather than quietly succeed
+            return list(cloze_ords) if notetype_id == CLOZE_ID else []
+
         models = types.SimpleNamespace(
             id_for_name=notetype_ids.get,
             get=lambda notetype_id: (
                 {"id": notetype_id} if notetype_id in existing_notetypes else None
             ),
-            # only the Cloze note type has cloze fields, so asking about the
-            # wrong one has to come back empty rather than quietly succeed
-            cloze_fields=lambda notetype_id: (
-                list(cloze_ords) if notetype_id == CLOZE_ID else []
-            ),
+            cloze_fields=cloze_fields,
         )
         mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
 
