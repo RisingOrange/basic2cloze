@@ -53,6 +53,9 @@ def load_addon(monkeypatch):
         has_cloze_note_type: bool = True,
         # stock Cloze: Text is a cloze field, Back Extra is not
         cloze_ords: tuple = (0,),
+        # ids the cache still knows but the collection no longer has, i.e.
+        # note types deleted after profile load
+        deleted_note_type_ids: tuple = (),
     ):
         profile_hooks = []
 
@@ -82,12 +85,18 @@ def load_addon(monkeypatch):
         if has_cloze_note_type:
             notetype_ids["Cloze"] = CLOZE_ID
 
+        existing_notetypes = set(notetype_ids.values()) - set(deleted_note_type_ids)
+
         models = types.SimpleNamespace(
             id_for_name=notetype_ids.get,
             get=lambda notetype_id: (
-                {"id": notetype_id} if notetype_id in notetype_ids.values() else None
+                {"id": notetype_id} if notetype_id in existing_notetypes else None
             ),
-            cloze_fields=lambda notetype_id: list(cloze_ords),
+            # only the Cloze note type has cloze fields, so asking about the
+            # wrong one has to come back empty rather than quietly succeed
+            cloze_fields=lambda notetype_id: (
+                list(cloze_ords) if notetype_id == CLOZE_ID else []
+            ),
         )
         mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
 

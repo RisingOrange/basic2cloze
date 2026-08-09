@@ -42,21 +42,26 @@ def contains_cloze(note: Note):
 def cloze_field_flags(note_type):
     """Which of this note type's fields to present as cloze fields.
 
+    None when we have nothing to say and Anki's own flags should stand.
+
     Conversion maps fields positionally, and only some of the Cloze note
     type's fields are cloze fields -- Back Extra is not -- so a cloze typed
     into Basic's Back lands somewhere it deletes nothing. Flag the ones that
     do survive conversion, rather than all of them.
-    """
-    field_count = len(note_type["flds"])
 
+    A note destined for "Cloze (Hide all)" may not match, since that target
+    only becomes knowable once the note has content, and the editor asks at
+    load time. The plain Cloze type is the assumption.
+    """
     cloze_note_type = get_cloze_note_type()
     if not cloze_note_type:
-        # nothing to convert into, so leave every field as it was rather than
-        # disabling the button the rest of this add-on just went and enabled
-        return [True] * field_count
+        # Nothing to convert into, so conversion will refuse and Anki will
+        # block the add. Say nothing and let the button stay disabled rather
+        # than invite a cloze that cannot be added.
+        return None
 
     cloze_ords = set(mw.col.models.cloze_fields(cloze_note_type["id"]))
-    return [ord in cloze_ords for ord in range(field_count)]
+    return [ord in cloze_ords for ord in range(len(note_type["flds"]))]
 
 
 def main():
@@ -145,7 +150,11 @@ def main():
             if note_type["id"] not in get_basic_note_type_ids():
                 return js
 
-            flags = json.dumps(cloze_field_flags(note_type))
+            field_flags = cloze_field_flags(note_type)
+            if field_flags is None:
+                return js
+
+            flags = json.dumps(field_flags)
             # guarded so that losing the global degrades to Anki's own flags,
             # rather than rejecting the promise this JS runs in and costing us
             # editor_did_load_note and the duplicate display update with it

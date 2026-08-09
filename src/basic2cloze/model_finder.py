@@ -49,11 +49,14 @@ def get_cloze_note_type_ids():
 
 
 def get_cloze_note_type():
-    """The note type a Basic note converts into, or None if there isn't one.
+    """The plain Cloze note type, or None if the collection has none.
 
-    Single source of the choice: the conversion and the editor's cloze field
+    Single source of that choice: the conversion and the editor's cloze field
     flags describe the same note type only for as long as they both come
     through here rather than each picking from the id list themselves.
+
+    Not every conversion ends here -- a note using the hide-all syntax goes to
+    "Cloze (Hide all)" instead, which target_model picks separately.
     """
     cloze_note_type_ids = get_cloze_note_type_ids()
     if not cloze_note_type_ids:

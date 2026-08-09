@@ -42,13 +42,19 @@ def test_flags_follow_a_customised_cloze_note_type(flag_cloze_fields):
     assert "setClozeFields([true, true]);" in js
 
 
-def test_every_field_is_flagged_without_a_cloze_note_type(flag_cloze_fields):
-    """Nothing to convert into, so don't disable what the add-on just enabled."""
+def test_nothing_is_flagged_without_a_cloze_note_type(flag_cloze_fields):
+    """Conversion would refuse and Anki would block the add, so an enabled
+    cloze button could only lead to a note that cannot be added."""
     hook = flag_cloze_fields(has_cloze_note_type=False)
 
-    js = hook("js;", FakeNote(BASIC_ID, 2), None)
+    assert hook("js;", FakeNote(BASIC_ID, 2), None) == "js;"
 
-    assert "setClozeFields([true, true]);" in js
+
+def test_nothing_is_flagged_if_the_cloze_note_type_was_deleted(flag_cloze_fields):
+    """The ids are cached at profile load, so they outlive the note type."""
+    hook = flag_cloze_fields(deleted_note_type_ids=(CLOZE_ID,))
+
+    assert hook("js;", FakeNote(BASIC_ID, 2), None) == "js;"
 
 
 def test_flag_count_follows_the_field_count(widen_cloze_fields):
