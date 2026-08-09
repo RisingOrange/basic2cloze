@@ -1,6 +1,9 @@
+import json
 import re
+import traceback
 
 from anki.hooks import wrap
+from anki.models import ModelManager
 from anki.notes import Note
 from aqt import gui_hooks, mw
 from aqt.addcards import AddCards
@@ -8,7 +11,11 @@ from aqt.editor import Editor
 from aqt.utils import tooltip
 
 from .consts import ANKI_VERSION_TUPLE
-from .model_finder import get_basic_note_type_ids, get_cloze_note_type_ids
+from .model_finder import (
+    get_basic_note_type_ids,
+    get_cloze_note_type,
+    get_cloze_note_type_ids,
+)
 from .model_selector import target_model
 
 try:
@@ -30,6 +37,35 @@ def contains_cloze(note: Note):
         if m:
             return True
     return False
+
+
+def cloze_field_flags(note_type):
+    """Which of this note type's fields to present as cloze fields.
+
+    None when we have nothing to say and Anki's own flags should stand.
+
+    Conversion maps fields positionally, and only some of the Cloze note
+    type's fields are cloze fields -- Back Extra is not -- so a cloze typed
+    into Basic's Back lands somewhere it deletes nothing. Flag the ones that
+    do survive conversion, rather than all of them.
+
+    A note destined for "Cloze (Hide all)" may not match, since that target
+    only becomes knowable once the note has content, and the editor asks at
+    load time. The plain Cloze type is the assumption.
+    """
+    cloze_note_type = get_cloze_note_type()
+    if not cloze_note_type:
+        # Nothing to convert into, so conversion will refuse and Anki will
+        # block the add. Say nothing and let the button stay disabled rather
+        # than invite a cloze that cannot be added.
+        return None
+
+    # Has to stay behind that check. cloze_fields on an id the collection no
+    # longer holds panics out of the Rust backend as a BaseException, which
+    # the except around the caller cannot catch, and Anki drops a filter
+    # callback that raises -- so it would take the whole fix down with it.
+    cloze_ords = set(mw.col.models.cloze_fields(cloze_note_type["id"]))
+    return [index in cloze_ords for index in range(len(note_type["flds"]))]
 
 
 def main():
@@ -81,6 +117,7 @@ def main():
 
     # adding the cloze buttons also enables the shortcut!
     # in older version the button and the shortcut exist by default
+    # from 25.9 this only makes them visible -- see the per-field flags below
     def maybe_show_cloze_button(editor: Editor):
         if editor.note.note_type()["id"] not in get_basic_note_type_ids():
             return
@@ -107,6 +144,41 @@ def main():
             )
 
     gui_hooks.editor_did_load_note.append(maybe_show_cloze_button)
+
+    # Anki >= 25.9 additionally greys the cloze button out unless the focused
+    # field is one of the note type's cloze fields. Basic has none, so the
+    # button shown above would never become usable. Anki sets the per-field
+    # flags from the JS that loadNote runs, so set ours there.
+    def flag_cloze_fields_for_basic(js: str, note: Note, editor) -> str:
+        try:
+            note_type = note.note_type()
+            if note_type["id"] not in get_basic_note_type_ids():
+                return js
+
+            field_flags = cloze_field_flags(note_type)
+            if field_flags is None:
+                return js
+
+            flags = json.dumps(field_flags)
+            # guarded so that losing the global degrades to Anki's own flags,
+            # rather than rejecting the promise this JS runs in and costing us
+            # editor_did_load_note and the duplicate display update with it
+            return (
+                f"{js} if (typeof setClozeFields === 'function')"
+                f" {{ setClozeFields({flags}); }}"
+            )
+        except Exception:
+            # this hook drops a callback permanently if it raises
+            traceback.print_exc()
+            return js
+
+    # cloze_fields arrived with the per-field gating, so it stands in for it.
+    # The hook itself long predates that, but check rather than risk an
+    # AttributeError taking the whole add-on down at import.
+    if hasattr(ModelManager, "cloze_fields") and hasattr(
+        gui_hooks, "editor_will_load_note"
+    ):
+        gui_hooks.editor_will_load_note.append(flag_cloze_fields_for_basic)
 
     # hide cloze warnings
     if ANKI_VERSION_TUPLE >= (2, 1, 45):

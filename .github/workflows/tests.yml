@@ -1,0 +1,39 @@
+name: tests
+
+# Deliberately no `schedule:` trigger. The contract tests would ideally run on
+# Anki's release schedule rather than ours, but GitHub disables cron in public
+# repositories after 60 days without activity, so it would go quiet during
+# exactly the dormant stretches it was meant to cover. Run the tests by hand
+# when checking a new Anki release: uv run --no-project pytest
+on:
+  # push is limited to master so a branch with a PR open is not built twice
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install the newest Anki
+        # aqt is only ever read as source text, never imported, so skip its
+        # PyQt6 dependency
+        run: |
+          uv venv
+          uv pip install pytest anki
+          uv pip install --no-deps aqt
+
+      - name: Show which Anki version we are testing against
+        run: uv run --no-project python -c "import anki.buildinfo; print(anki.buildinfo.version)"
+
+      # --no-project because pyproject.toml carries pytest config only; this
+      # repo is an Anki add-on, not an installable package
+      - run: uv run --no-project pytest -v

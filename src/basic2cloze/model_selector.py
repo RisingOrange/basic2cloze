@@ -1,8 +1,6 @@
 import re
 
-from aqt import mw
-
-from .model_finder import get_basic_note_type_ids, get_cloze_note_type_ids
+from .model_finder import get_basic_note_type_ids, get_cloze_note_type
 
 clozeHideAllType = "Cloze (Hide all)"
 
@@ -19,7 +17,7 @@ def target_model(note):
     # Basic cloze type
     for _, val in note.items():
         if re.search(r"\{\{c(\d+)::", val):
-            return mw.col.models.get(get_cloze_note_type_ids()[0]) if get_cloze_note_type_ids() else None
+            return get_cloze_note_type()
 
     # None for no-change
     return None

@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# anki/aqt are deliberately not pinned here: the point of the contract tests is
+# to run against whatever Anki release is current. See .github/workflows/tests.yml.
