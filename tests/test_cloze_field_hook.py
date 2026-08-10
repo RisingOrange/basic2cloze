@@ -2,15 +2,16 @@
 
 import pytest
 
-from conftest import BASIC_ID, CLOZE_ID, FakeNote
+from conftest import BASIC, BASIC_ID, CLOZE_ID, FakeNote
 
-UNRELATED_ID = 3333
+UNRELATED_ID = 9999  # distinct from every id conftest hands out
 
 
 @pytest.fixture
 def flag_cloze_fields(load_addon):
     def make(**kwargs):
-        hook = load_addon(cloze_fields_exists=True, **kwargs).editor_will_load_note
+        addon = load_addon(cloze_fields_exists=True, **kwargs)
+        hook = addon.gui_hooks.editor_will_load_note
         assert len(hook.callbacks) == 1
         return hook.callbacks[0]
 
@@ -45,7 +46,7 @@ def test_flags_follow_a_customised_cloze_note_type(flag_cloze_fields):
 def test_nothing_is_flagged_without_a_cloze_note_type(flag_cloze_fields):
     """Conversion would refuse and Anki would block the add, so an enabled
     cloze button could only lead to a note that cannot be added."""
-    hook = flag_cloze_fields(has_cloze_note_type=False)
+    hook = flag_cloze_fields(notetypes=(BASIC,))
 
     assert hook("js;", FakeNote(BASIC_ID, 2), None) == "js;"
 
@@ -86,14 +87,14 @@ def test_a_raising_note_does_not_take_the_hook_down_with_it(widen_cloze_fields):
 
 def test_hook_is_not_registered_on_anki_without_cloze_fields(load_addon):
     """Before Anki 25.9 there were no per-field cloze flags to widen."""
-    gui_hooks = load_addon(cloze_fields_exists=False)
+    gui_hooks = load_addon(cloze_fields_exists=False).gui_hooks
 
     assert gui_hooks.editor_will_load_note.callbacks == []
 
 
 def test_addon_still_loads_if_anki_drops_the_hook(load_addon):
     """Registering blind would AttributeError and take the add-on with it."""
-    gui_hooks = load_addon(cloze_fields_exists=True, hook_exists=False)
+    gui_hooks = load_addon(cloze_fields_exists=True, hook_exists=False).gui_hooks
 
     assert not hasattr(gui_hooks, "editor_will_load_note")
     # the rest of the add-on still came up

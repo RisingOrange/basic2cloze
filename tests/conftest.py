@@ -14,6 +14,89 @@ SRC = Path(__file__).resolve().parent.parent / "src"
 
 BASIC_ID = 1111
 CLOZE_ID = 2222
+HIDE_ALL_ID = 3333
+
+BASIC = {"id": BASIC_ID, "name": "Basic", "flds": [{"name": "Front"}, {"name": "Back"}]}
+CLOZE = {
+    "id": CLOZE_ID,
+    "name": "Cloze",
+    "flds": [{"name": "Text"}, {"name": "Back Extra"}],
+}
+CLOZE_HIDE_ALL = {
+    "id": HIDE_ALL_ID,
+    "name": "Cloze (Hide all)",
+    "flds": [{"name": "Text"}, {"name": "Back Extra"}],
+}
+
+
+class FakeModels:
+    """The handful of ModelManager methods the add-on reaches for."""
+
+    def __init__(self, notetypes, cloze_ords=(0,), deleted_ids=()):
+        self.notetypes = {notetype["id"]: notetype for notetype in notetypes}
+        self.cloze_ords = cloze_ords
+        # ids model_finder cached at profile load, before the note type went
+        self.deleted_ids = set(deleted_ids)
+
+    def get(self, notetype_id):
+        if notetype_id in self.deleted_ids:
+            return None
+        return self.notetypes.get(notetype_id)
+
+    def id_for_name(self, name):
+        for notetype in self.notetypes.values():
+            if notetype["name"] == name:
+                return notetype["id"]
+        return None
+
+    def cloze_fields(self, notetype_id):
+        if self.get(notetype_id) is None:
+            # the real backend panics on an unknown id, and a panic is a
+            # BaseException, so the add-on's except Exception won't save it
+            raise BaseException(f"panic: no note type {notetype_id}")
+        # only the Cloze note type has cloze fields, so asking about the
+        # wrong one has to come back empty rather than quietly succeed
+        return list(self.cloze_ords) if notetype_id == CLOZE_ID else []
+
+
+class EditableNote:
+    """Enough of anki.notes.Note for the conversion to be exercised.
+
+    The signature matters: convert_basic_to_cloze re-inits the note in place as
+    `note.__init__(col, new_model)`, which in Anki yields a blank note of that
+    note type -- hence the reset here.
+    """
+
+    def __init__(self, col, notetype, id=None):
+        self._notetype = notetype
+        self.fields = [""] * len(notetype["flds"])
+        self.tags = []
+
+    @property
+    def mid(self):
+        return self._notetype["id"]
+
+    def note_type(self):
+        return self._notetype
+
+    def keys(self):
+        return [field["name"] for field in self._notetype["flds"]]
+
+    def items(self):
+        return list(zip(self.keys(), self.fields))
+
+    def __getitem__(self, name):
+        return self.fields[self.keys().index(name)]
+
+    def __setitem__(self, name, value):
+        self.fields[self.keys().index(name)] = value
+
+
+def basic_note(*field_values):
+    note = EditableNote(None, BASIC)
+    for index, value in enumerate(field_values):
+        note.fields[index] = value
+    return note
 
 
 class FilterHook:
@@ -40,17 +123,18 @@ class FakeNote:
 
 @pytest.fixture
 def load_addon(monkeypatch):
-    """Import the add-on against stubbed Anki modules and return its gui_hooks.
+    """Import the add-on against stubbed Anki modules.
 
     `basic2cloze.__init__` calls main() on import, so importing is what
-    registers the hooks.
+    registers the hooks. Returns the stubbed gui_hooks, the fake ModelManager,
+    and the list any tooltip() text lands in.
     """
 
     def load(
         *,
         cloze_fields_exists: bool,
         hook_exists: bool = True,
-        has_cloze_note_type: bool = True,
+        notetypes=(BASIC, CLOZE),
         # stock Cloze: Text is a cloze field, Back Extra is not
         cloze_ords: tuple = (0,),
         # ids the cache still knows but the collection no longer has, i.e.
@@ -58,6 +142,7 @@ def load_addon(monkeypatch):
         deleted_note_type_ids: tuple = (),
     ):
         profile_hooks = []
+        tooltips = []
 
         anki = types.ModuleType("anki")
         anki.version = "26.8.1"
@@ -67,7 +152,7 @@ def load_addon(monkeypatch):
         anki_hooks.addHook = lambda name, cb: profile_hooks.append((name, cb))
 
         anki_notes = types.ModuleType("anki.notes")
-        anki_notes.Note = FakeNote
+        anki_notes.Note = EditableNote
         anki_notes.NoteFieldsCheckResult = types.SimpleNamespace(
             NORMAL=0, NOTETYPE_NOT_CLOZE=1, FIELD_NOT_CLOZE=2
         )
@@ -81,28 +166,7 @@ def load_addon(monkeypatch):
         anki_models = types.ModuleType("anki.models")
         anki_models.ModelManager = ModelManager
 
-        notetype_ids = {"Basic": BASIC_ID}
-        if has_cloze_note_type:
-            notetype_ids["Cloze"] = CLOZE_ID
-
-        existing_notetypes = set(notetype_ids.values()) - set(deleted_note_type_ids)
-
-        def cloze_fields(notetype_id):
-            if notetype_id not in existing_notetypes:
-                # the real backend panics on an unknown id, and a panic is a
-                # BaseException, so the add-on's except Exception won't save it
-                raise BaseException(f"panic: no note type {notetype_id}")
-            # only the Cloze note type has cloze fields, so asking about the
-            # wrong one has to come back empty rather than quietly succeed
-            return list(cloze_ords) if notetype_id == CLOZE_ID else []
-
-        models = types.SimpleNamespace(
-            id_for_name=notetype_ids.get,
-            get=lambda notetype_id: (
-                {"id": notetype_id} if notetype_id in existing_notetypes else None
-            ),
-            cloze_fields=cloze_fields,
-        )
+        models = FakeModels(notetypes, cloze_ords, deleted_note_type_ids)
         mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
 
         gui_hooks = types.SimpleNamespace(
@@ -133,7 +197,7 @@ def load_addon(monkeypatch):
         aqt_editor.MODEL_CLOZE = 1
 
         aqt_utils = types.ModuleType("aqt.utils")
-        aqt_utils.tooltip = lambda *args, **kwargs: None
+        aqt_utils.tooltip = lambda text, *args, **kwargs: tooltips.append(text)
         aqt_utils.tr = types.SimpleNamespace(
             notetypes_basic_name=lambda: "Basic",
             notetypes_cloze_name=lambda: "Cloze",
@@ -172,6 +236,8 @@ def load_addon(monkeypatch):
             if name == "profileLoaded":
                 callback()  # populates model_finder's cached notetype ids
 
-        return gui_hooks
+        return types.SimpleNamespace(
+            gui_hooks=gui_hooks, models=models, tooltips=tooltips
+        )
 
     return load
