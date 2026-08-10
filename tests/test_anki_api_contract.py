@@ -52,6 +52,31 @@ def test_cloze_fields_exists_on_model_manager():
     assert hasattr(ModelManager, "cloze_fields")
 
 
+def call_sites(package: str, method: str) -> list[str]:
+    """Where `.method(` is called across a package, excluding its definition."""
+    found = []
+    for path in sorted(package_dir(package).rglob("*.py")):
+        text = path.read_text(encoding="utf8", errors="replace")
+        for number, line in enumerate(text.splitlines(), start=1):
+            if f".{method}(" in line and f"def {method}(" not in line:
+                found.append(f"{path.name}:{number}")
+    return found
+
+
+def test_cloze_fields_still_has_a_single_caller():
+    """The add-on answers cloze_fields for Basic process-wide, so every caller
+    gets that answer. That is only as narrow as intended while the editor is
+    the one asking -- a second caller would silently be answered too, and the
+    symptom would surface somewhere unrelated to the cloze button.
+    """
+    callers = call_sites("aqt", "cloze_fields") + call_sites("anki", "cloze_fields")
+
+    assert len(callers) == 1, (
+        "cloze_fields no longer has exactly one caller, so wrapping it now "
+        f"reaches more than the editor's per-field flags: {callers}"
+    )
+
+
 def function_containing(source: str, needle: str) -> str:
     for node in ast.walk(ast.parse(source)):
         if not isinstance(node, ast.FunctionDef):
