@@ -9,5 +9,5 @@
         "anki21"
     ],
     "min_anki_version": "2.1.28",
-    "max_tested_anki_version": "2.1.54"
+    "max_tested_anki_version": "26.08.1"
 }
