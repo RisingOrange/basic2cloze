@@ -157,19 +157,20 @@ def load_addon(monkeypatch):
             NORMAL=0, NOTETYPE_NOT_CLOZE=1, FIELD_NOT_CLOZE=2
         )
 
-        models = FakeModels(notetypes, cloze_ords, deleted_note_type_ids)
-        mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
-
-        class ModelManager:
-            pass
-
+        # mw.col.models has to be an instance of the very class the add-on
+        # patches, as it is in Anki: the wrapper compares the two to tell the
+        # current collection's manager from any other one
+        members = {
+            "__init__": FakeModels.__init__,
+            "get": FakeModels.get,
+            "id_for_name": FakeModels.id_for_name,
+        }
         if cloze_fields_exists:
-            # the add-on wraps this, so it has to answer like the real one --
-            # per note type -- or a wrapper that returns the wrong ordinals
-            # would look identical to one that returns the right ones
-            ModelManager.cloze_fields = (
-                lambda self, notetype_id: models.cloze_fields(notetype_id)
-            )
+            members["cloze_fields"] = FakeModels.cloze_fields
+        ModelManager = type("ModelManager", (), members)
+
+        models = ModelManager(notetypes, cloze_ords, deleted_note_type_ids)
+        mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
 
         anki_models = types.ModuleType("anki.models")
         anki_models.ModelManager = ModelManager

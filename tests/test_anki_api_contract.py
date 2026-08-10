@@ -52,14 +52,23 @@ def test_cloze_fields_exists_on_model_manager():
     assert hasattr(ModelManager, "cloze_fields")
 
 
-def call_sites(package: str, method: str) -> list[str]:
-    """Where `.method(` is called across a package, excluding its definition."""
+def attribute_uses(package: str, name: str) -> list[str]:
+    """Every `<something>.name` across a package, by AST rather than by text.
+
+    Catches the aliased and getattr-free forms a text search would miss --
+    `f = models.cloze_fields` then `f(mid)` still shows up here -- and cannot
+    be fooled by the name appearing in a comment or a string.
+    """
     found = []
     for path in sorted(package_dir(package).rglob("*.py")):
         text = path.read_text(encoding="utf8", errors="replace")
-        for number, line in enumerate(text.splitlines(), start=1):
-            if f".{method}(" in line and f"def {method}(" not in line:
-                found.append(f"{path.name}:{number}")
+        try:
+            tree = ast.parse(text)
+        except SyntaxError:  # a module for a Python version we are not on
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr == name:
+                found.append(f"{path.name}:{node.lineno}")
     return found
 
 
@@ -69,11 +78,19 @@ def test_cloze_fields_still_has_a_single_caller():
     the one asking -- a second caller would silently be answered too, and the
     symptom would surface somewhere unrelated to the cloze button.
     """
-    callers = call_sites("aqt", "cloze_fields") + call_sites("anki", "cloze_fields")
+    users = attribute_uses("aqt", "cloze_fields") + attribute_uses(
+        "anki", "cloze_fields"
+    )
 
-    assert len(callers) == 1, (
-        "cloze_fields no longer has exactly one caller, so wrapping it now "
-        f"reaches more than the editor's per-field flags: {callers}"
+    assert len(users) == 1, (
+        "cloze_fields is no longer reached from exactly one place, so wrapping "
+        f"it now answers more than the editor's per-field flags: {users}"
+    )
+    # and that one place has to be the code that feeds the editor, not merely
+    # some single other caller that happened to replace it
+    name, editor = source_of("aqt", *EDITOR_MODULES)
+    assert users[0].startswith(name), (
+        f"the only use of cloze_fields moved out of {name}: {users}"
     )
 
 

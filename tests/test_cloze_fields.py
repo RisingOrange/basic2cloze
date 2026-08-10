@@ -14,11 +14,23 @@ UNRELATED_ID = 9999  # distinct from every id conftest hands out
 
 @pytest.fixture
 def cloze_fields(load_addon):
-    """The wrapped ModelManager.cloze_fields, bound to a stub instance."""
+    """The wrapped ModelManager.cloze_fields, bound to the collection's own."""
 
     def make(**kwargs):
         addon = load_addon(cloze_fields_exists=True, **kwargs)
-        return addon.model_manager().cloze_fields
+        return addon.models.cloze_fields
+
+    return make
+
+
+@pytest.fixture
+def foreign_cloze_fields(load_addon):
+    """The same wrapper reached through a *different* collection's manager."""
+
+    def make(**kwargs):
+        addon = load_addon(cloze_fields_exists=True, **kwargs)
+        other = addon.model_manager((BASIC, CLOZE))
+        return other.cloze_fields
 
     return make
 
@@ -53,6 +65,13 @@ def test_a_deleted_cloze_note_type_does_not_reach_the_backend(cloze_fields):
     """The ids are cached at profile load, so they outlive the note type, and
     asking the backend about a missing one panics past `except Exception`."""
     assert cloze_fields(deleted_note_type_ids=(CLOZE_ID,))(BASIC_ID) == []
+
+
+def test_another_collections_manager_is_left_alone(foreign_cloze_fields):
+    """The Cloze id is resolved against the current collection, so answering
+    for someone else's would hand their backend an id from ours -- which is
+    the panic no `except Exception` can catch."""
+    assert foreign_cloze_fields()(BASIC_ID) == []
 
 
 def test_not_wrapped_on_anki_without_cloze_fields(load_addon):

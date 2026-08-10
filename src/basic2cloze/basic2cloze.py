@@ -132,6 +132,15 @@ def main():
 
         def cloze_fields_for_basic_too(self, notetype_id):
             try:
+                # Only answer for the collection whose note type ids we cached
+                # and whose Cloze id get() confirms below. This is a class-wide
+                # patch, so another add-on can call it holding a different
+                # collection, and handing that one an id validated against ours
+                # is the uncatchable backend panic the check exists to avoid.
+                collection = mw.col
+                if collection is None or self is not collection.models:
+                    return original_cloze_fields(self, notetype_id)
+
                 if notetype_id in get_basic_note_type_ids():
                     # Nothing to convert into means conversion will refuse and
                     # Anki will block the add, so leave the button disabled
