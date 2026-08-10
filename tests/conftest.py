@@ -157,17 +157,22 @@ def load_addon(monkeypatch):
             NORMAL=0, NOTETYPE_NOT_CLOZE=1, FIELD_NOT_CLOZE=2
         )
 
+        models = FakeModels(notetypes, cloze_ords, deleted_note_type_ids)
+        mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
+
         class ModelManager:
             pass
 
         if cloze_fields_exists:
-            ModelManager.cloze_fields = lambda self, mid: []
+            # the add-on wraps this, so it has to answer like the real one --
+            # per note type -- or a wrapper that returns the wrong ordinals
+            # would look identical to one that returns the right ones
+            ModelManager.cloze_fields = (
+                lambda self, notetype_id: models.cloze_fields(notetype_id)
+            )
 
         anki_models = types.ModuleType("anki.models")
         anki_models.ModelManager = ModelManager
-
-        models = FakeModels(notetypes, cloze_ords, deleted_note_type_ids)
-        mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
 
         gui_hooks = types.SimpleNamespace(
             add_cards_will_add_note=FilterHook(),
@@ -237,7 +242,12 @@ def load_addon(monkeypatch):
                 callback()  # populates model_finder's cached notetype ids
 
         return types.SimpleNamespace(
-            gui_hooks=gui_hooks, models=models, tooltips=tooltips
+            gui_hooks=gui_hooks,
+            models=models,
+            tooltips=tooltips,
+            # the add-on wraps cloze_fields on the class, so tests need the
+            # class the add-on actually saw
+            model_manager=ModelManager,
         )
 
     return load

@@ -48,15 +48,8 @@ ADDCARDS_MODULES = ("addcards_legacy.py", "addcards.py")
 
 
 def test_cloze_fields_exists_on_model_manager():
-    """main() gates the cloze-field widening on this attribute existing."""
+    """main() wraps this method, and gates on the attribute existing."""
     assert hasattr(ModelManager, "cloze_fields")
-
-
-def test_editor_will_load_note_hook_exists():
-    """We append our setClozeFields() call through this filter hook."""
-    _, hooks = source_of("_aqt", "hooks.py")
-
-    assert "editor_will_load_note = " in hooks
 
 
 def function_containing(source: str, needle: str) -> str:
@@ -69,18 +62,17 @@ def function_containing(source: str, needle: str) -> str:
     return ""
 
 
-def test_cloze_fields_are_set_in_the_js_batch_we_filter():
-    """Our override has to land in the same batch, not a separate eval."""
+def test_load_note_asks_cloze_fields_which_fields_are_cloze():
+    """The whole fix rests on the editor deriving its per-field flags from
+    this call, so that wrapping the method reaches the editor."""
     name, editor = source_of("aqt", *EDITOR_MODULES)
 
-    load_note = function_containing(editor, "gui_hooks.editor_will_load_note(")
-    assert load_note, (
-        f"{name} no longer filters its load JS through editor_will_load_note "
-        "-- the flags set by flag_cloze_fields_for_basic will stop applying"
-    )
-    assert "setClozeFields(" in load_note, (
-        f"setClozeFields moved out of the {name} function that filters its JS "
-        "through editor_will_load_note, so appending to that JS no longer wins"
+    load_note = function_containing(editor, "setClozeFields(")
+    assert load_note, f"{name} no longer sends setClozeFields to the frontend"
+    assert "cloze_fields(" in load_note, (
+        f"{name} no longer derives its cloze field flags from "
+        "models.cloze_fields(), so wrapping that method no longer reaches "
+        "the editor's cloze button"
     )
 
 
@@ -90,25 +82,6 @@ def editor_bundle() -> str:
     # which is exactly the change worth being told about
     assert bundle.exists(), f"{bundle.name} is no longer shipped"
     return bundle.read_text(encoding="utf8", errors="replace")
-
-
-def test_editor_frontend_exposes_set_cloze_fields():
-    """flag_cloze_fields_for_basic calls this global by name."""
-    bundle = editor_bundle()
-
-    # the name alone also appears on internal references, so look for it as a
-    # key of the object the editor assigns onto globalThis -- that assignment
-    # is what makes our appended JS able to call it at all
-    # the bundle makes several such assignments, so check them all
-    assignments = bundle.split("Object.assign(globalThis,")[1:]
-    assert assignments, (
-        "the editor bundle no longer assigns anything onto globalThis; how it "
-        "exposes setClozeFields now needs re-checking"
-    )
-    assert any("setClozeFields:" in body[:3000] for body in assignments), (
-        "setClozeFields is no longer among the editor's globals, so the JS "
-        "appended by flag_cloze_fields_for_basic can no longer call it"
-    )
 
 
 def test_editor_frontend_exposes_the_notetype_toolbar():
