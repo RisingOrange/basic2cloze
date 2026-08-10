@@ -157,17 +157,23 @@ def load_addon(monkeypatch):
             NORMAL=0, NOTETYPE_NOT_CLOZE=1, FIELD_NOT_CLOZE=2
         )
 
-        class ModelManager:
-            pass
-
+        # mw.col.models has to be an instance of the very class the add-on
+        # patches, as it is in Anki: the wrapper compares the two to tell the
+        # current collection's manager from any other one
+        members = {
+            "__init__": FakeModels.__init__,
+            "get": FakeModels.get,
+            "id_for_name": FakeModels.id_for_name,
+        }
         if cloze_fields_exists:
-            ModelManager.cloze_fields = lambda self, mid: []
+            members["cloze_fields"] = FakeModels.cloze_fields
+        ModelManager = type("ModelManager", (), members)
+
+        models = ModelManager(notetypes, cloze_ords, deleted_note_type_ids)
+        mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
 
         anki_models = types.ModuleType("anki.models")
         anki_models.ModelManager = ModelManager
-
-        models = FakeModels(notetypes, cloze_ords, deleted_note_type_ids)
-        mw = types.SimpleNamespace(col=types.SimpleNamespace(models=models))
 
         gui_hooks = types.SimpleNamespace(
             add_cards_will_add_note=FilterHook(),
@@ -237,7 +243,12 @@ def load_addon(monkeypatch):
                 callback()  # populates model_finder's cached notetype ids
 
         return types.SimpleNamespace(
-            gui_hooks=gui_hooks, models=models, tooltips=tooltips
+            gui_hooks=gui_hooks,
+            models=models,
+            tooltips=tooltips,
+            # the add-on wraps cloze_fields on the class, so tests need the
+            # class the add-on actually saw
+            model_manager=ModelManager,
         )
 
     return load

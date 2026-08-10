@@ -1,4 +1,3 @@
-import json
 import re
 import traceback
 
@@ -37,35 +36,6 @@ def contains_cloze(note: Note):
         if m:
             return True
     return False
-
-
-def cloze_field_flags(note_type):
-    """Which of this note type's fields to present as cloze fields.
-
-    None when we have nothing to say and Anki's own flags should stand.
-
-    Conversion maps fields positionally, and only some of the Cloze note
-    type's fields are cloze fields -- Back Extra is not -- so a cloze typed
-    into Basic's Back lands somewhere it deletes nothing. Flag the ones that
-    do survive conversion, rather than all of them.
-
-    A note destined for "Cloze (Hide all)" may not match, since that target
-    only becomes knowable once the note has content, and the editor asks at
-    load time. The plain Cloze type is the assumption.
-    """
-    cloze_note_type = get_cloze_note_type()
-    if not cloze_note_type:
-        # Nothing to convert into, so conversion will refuse and Anki will
-        # block the add. Say nothing and let the button stay disabled rather
-        # than invite a cloze that cannot be added.
-        return None
-
-    # Has to stay behind that check. cloze_fields on an id the collection no
-    # longer holds panics out of the Rust backend as a BaseException, which
-    # the except around the caller cannot catch, and Anki drops a filter
-    # callback that raises -- so it would take the whole fix down with it.
-    cloze_ords = set(mw.col.models.cloze_fields(cloze_note_type["id"]))
-    return [index in cloze_ords for index in range(len(note_type["flds"]))]
 
 
 def main():
@@ -146,39 +116,46 @@ def main():
     gui_hooks.editor_did_load_note.append(maybe_show_cloze_button)
 
     # Anki >= 25.9 additionally greys the cloze button out unless the focused
-    # field is one of the note type's cloze fields. Basic has none, so the
-    # button shown above would never become usable. Anki sets the per-field
-    # flags from the JS that loadNote runs, so set ours there.
-    def flag_cloze_fields_for_basic(js: str, note: Note, editor) -> str:
-        try:
-            note_type = note.note_type()
-            if note_type["id"] not in get_basic_note_type_ids():
-                return js
+    # field is one of the note type's cloze fields, and Basic has none, so the
+    # button shown above would never become usable. Answer for Basic with the
+    # ordinals its fields land on once converted: fields map positionally onto
+    # the Cloze note type, and only some of those are cloze fields -- Back
+    # Extra is not -- so a cloze typed into Basic's Back deletes nothing.
+    #
+    # Anki feeds this to the editor itself. Appending our own setClozeFields()
+    # to the JS that loadNote runs would be narrower, but it has to run after
+    # Anki's own call, and an add-on that defers that batch wins instead:
+    # AnKing Note Types wraps it in EditorIO.clearOcclusionMode().then(...),
+    # which leaves Anki's call to overwrite ours.
+    if hasattr(ModelManager, "cloze_fields"):
+        original_cloze_fields = ModelManager.cloze_fields
 
-            field_flags = cloze_field_flags(note_type)
-            if field_flags is None:
-                return js
+        def cloze_fields_for_basic_too(self, notetype_id):
+            try:
+                # Only answer for the collection whose note type ids we cached
+                # and whose Cloze id get() confirms below. This is a class-wide
+                # patch, so another add-on can call it holding a different
+                # collection, and handing that one an id validated against ours
+                # is the uncatchable backend panic the check exists to avoid.
+                collection = mw.col
+                if collection is None or self is not collection.models:
+                    return original_cloze_fields(self, notetype_id)
 
-            flags = json.dumps(field_flags)
-            # guarded so that losing the global degrades to Anki's own flags,
-            # rather than rejecting the promise this JS runs in and costing us
-            # editor_did_load_note and the duplicate display update with it
-            return (
-                f"{js} if (typeof setClozeFields === 'function')"
-                f" {{ setClozeFields({flags}); }}"
-            )
-        except Exception:
-            # this hook drops a callback permanently if it raises
-            traceback.print_exc()
-            return js
+                if notetype_id in get_basic_note_type_ids():
+                    # Nothing to convert into means conversion will refuse and
+                    # Anki will block the add, so leave the button disabled
+                    # rather than invite a cloze that cannot be added.
+                    cloze_note_type = get_cloze_note_type()
+                    if cloze_note_type:
+                        # get() confirmed the id, so this cannot hit the
+                        # missing-note-type panic in the Rust backend
+                        return original_cloze_fields(self, cloze_note_type["id"])
+            except Exception:
+                traceback.print_exc()
 
-    # cloze_fields arrived with the per-field gating, so it stands in for it.
-    # The hook itself long predates that, but check rather than risk an
-    # AttributeError taking the whole add-on down at import.
-    if hasattr(ModelManager, "cloze_fields") and hasattr(
-        gui_hooks, "editor_will_load_note"
-    ):
-        gui_hooks.editor_will_load_note.append(flag_cloze_fields_for_basic)
+            return original_cloze_fields(self, notetype_id)
+
+        ModelManager.cloze_fields = cloze_fields_for_basic_too
 
     # hide cloze warnings
     if ANKI_VERSION_TUPLE >= (2, 1, 45):
